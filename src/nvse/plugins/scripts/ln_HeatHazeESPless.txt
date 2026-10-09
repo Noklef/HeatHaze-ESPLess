@@ -1,4 +1,5 @@
 ; Compile and run the script
+ref rInit
 let rInit := CompileScript "HeatHazeESPless/HeatHazeScript.gek"
 if eval rInit
     call rInit
