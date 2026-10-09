@@ -1,0 +1,7 @@
+scn HeatHazeDisableUDF
+
+begin function {}
+  if eval !HeatHazeREF.GetDisabled
+    HeatHazeREF.Disable
+  endif
+end

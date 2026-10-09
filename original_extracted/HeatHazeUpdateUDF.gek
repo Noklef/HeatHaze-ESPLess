@@ -1,0 +1,33 @@
+scn HeatHazeUpdateUDF
+
+begin function {}
+
+  if eval player.IsInInterior == 1 || player.GetWaterImmersionPerc >= 0.875
+    call HeatHazeDisableUDF
+  else
+    float fOutgoingHeatHaze = ((IsRefInList HeatHazeWeathers (GetOutgoingWeather)) != -1) * (1 - GetCurrentWeatherPercent)
+    float fIncomingHeatHaze = ((IsRefInList HeatHazeWeathers (GetCurrentWeather)) != -1) * GetCurrentWeatherPercent
+    float fCurrentTime = GetCurrentTime
+
+    if fCurrentTime > 12
+      fCurrentTime = ((24 - fCurrentTime) + 0.001) / 12
+    else
+      fCurrentTime = (fCurrentTime + 0.001) / 12
+    endif
+
+    float fHeatHazeIntensity = (fOutgoingHeatHaze + fIncomingHeatHaze) * fCurrentTime
+    fHeatHazeIntensity += 0.001
+
+    if fHeatHazeIntensity > 0.5
+      fHeatHazeIntensity -= 0.5
+      if HeatHazeREF.GetDisabled
+        HeatHazeREF.Enable
+      endif
+      HeatHazeREF.MoveTo PlayerRef 0 0 10
+      HeatHazeREF.SetScale ((HeatHaze.fNoonScale) / (1 - fHeatHazeIntensity))
+    else
+      call HeatHazeDisableUDF
+    endif
+  endif
+
+end

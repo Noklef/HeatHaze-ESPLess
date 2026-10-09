@@ -1,0 +1,13 @@
+scn HeatHazeScript
+
+float fNoonScale
+
+begin GameMode
+  if GetGameLoaded
+    fNoonScale  = GetINIFloat "Settings:NoonScale" "HeatHaze.ini"
+    if eval !fNoonScale
+        fNoonScale = 3.00
+    endif
+  endif
+  call HeatHazeUpdateUDF
+end
