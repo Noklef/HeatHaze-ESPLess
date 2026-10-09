@@ -3,7 +3,7 @@ import zipfile
 
 
 def main():
-    root = Path(__file__).resolve().parent
+    root = Path(__file__).resolve().parent.parent
     source = root / "src"
     mesh_path = Path("Meshes/rwle/weather/heathaze/heathaze_torus.nif")
     varied_mesh = source / mesh_path.with_name("heathaze_torus_varied.nif")

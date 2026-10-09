@@ -38,7 +38,7 @@ jobs:
             exit 1
           fi
 
-          python build.py
+          python scripts/build.py
           package="dist/HeatHaze-ESPless-${version}.zip"
           mv dist/HeatHaze-ESPless.zip "$package"
 
