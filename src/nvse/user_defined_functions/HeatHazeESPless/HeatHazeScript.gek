@@ -81,6 +81,9 @@ begin function {}
             return
         endif
 
+        ; Give the object a name, so clicking it with the console open doesn't just show the HEX value
+        SetName "Heat Haze" rHazeBase
+
         ; Storing the haze base in the reference so we can re-use it later on
         rPlayer.AuxVarSetRef "*_HeatHazeESPless.Base" rHazeBase
     endif
