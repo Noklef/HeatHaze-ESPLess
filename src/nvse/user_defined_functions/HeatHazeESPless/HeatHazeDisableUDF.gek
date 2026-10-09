@@ -1,0 +1,19 @@
+begin function {}
+    ref rPlayer ; Player reference
+    ref rHaze ; The actual haze object
+    
+    ; Player reference
+    let rPlayer := GetFormFromMod "FalloutNV.esm" "14"
+    ; Created haze object reference
+    let rHaze := rPlayer.AuxVarGetRef "*_HeatHazeESPless.Ref"
+
+    ; Don't disable if the haze doesn't exist, or is a reference
+    if eval !rHaze || !(IsReference rHaze)
+        return
+    endif
+
+    ; Disable the haze if it isn't already
+    if eval !rHaze.GetDisabled
+        rHaze.Disable
+    endif
+end

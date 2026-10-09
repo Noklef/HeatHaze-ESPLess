@@ -1,0 +1,38 @@
+; PreLoadGame passes a path. Manual calls and xm_ pass an empty string.
+string_var sSavePath ; We need to keep {sSavePath} since PreLoadGame calls it with that argument
+begin function {sSavePath}
+    ; https://geckwiki.com/index.php?title=MarkForDelete
+    ; https://geckwiki.com/index.php?title=AuxiliaryVariableErase
+
+    ref rPlayer ; Player reference
+    ref rHazeBase ; Our custom activator we clone with the heat mesh assigned to it
+    ref rHaze ; The actual haze object
+
+    ; 14 is the player reference
+    let rPlayer := GetFormFromMod "FalloutNV.esm" "14" 
+
+    ; Get the 2 references we need to clean up the haze effect
+    let rHazeBase := rPlayer.AuxVarGetRef "*_HeatHazeESPless.Base"
+    let rHaze := rPlayer.AuxVarGetRef "*_HeatHazeESPless.Ref"
+
+    ; Discard the reference for cleanup
+    rPlayer.AuxVarErase "*_HeatHazeESPless.Ref"
+
+    ; There's like 7 things to check, so i put it into 3 else ifs
+    if eval !rHaze || !(IsReference rHaze) ; If haze doesn't exist, or isn't a reference
+        return
+    elseif eval !rHazeBase || (rHaze.GetBaseObject) != rHazeBase ; If the activator doesn't exist, or it's not based on the haze we created
+        return
+    elseif eval (rHaze.AuxVarGetFlt "*_HeatHazeESPless.Owner") != 1 ; If the haze isn't owned by us
+        return
+    endif
+
+    ; Disable the haze if it isn't already
+    rHaze.Disable
+    ; Remove its persistence
+    rHaze.SetPersistent 0 
+    ; Delte the owner flag
+    rHaze.AuxVarErase "*_HeatHazeESPless.Owner" 
+    ; Mark it for deletion
+    rHaze.MarkForDelete
+end

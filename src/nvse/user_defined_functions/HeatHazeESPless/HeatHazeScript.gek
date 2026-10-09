@@ -1,3 +1,164 @@
 begin function {}
-  
+    ; Dev notes for me:
+    ;   This uses a player reference to get / set info. I.E. '*_HeatHazeESPless'
+    ;       - *: prefix is used as a "temp storage"
+    ;       - _: prefix is used as a "public storage", which is shared. 
+    ;       - HeatHazeEspless: used as the "namespace" for this mod
+    ;   GECK wiki stuff:
+    ;       - https://geckwiki.com/index.php?title=AuxiliaryVariableSetFloat
+    ;       - https://geckwiki.com/index.php/SetGameMainLoopCallback
+    ;       - https://geckwiki.com/index.php?title=GetFormFromMod
+    ;       - https://geckwiki.com/index.php?title=PlaceAtMe
+    ;       - https://geckwiki.com/index.php?title=SetReferenceFlag
+
+    ref rPlayer ; Player reference
+    ref rUpdate ; Update logic script reference (compiled)
+    ref rCleanup ; Cleanup logic script reference (compiled)
+    ref rTemplate ; The base we clone for the heat haze effect (NelsonsLightBeamAct)
+    ref rHazeBase ; Our custom activator we clone with the heat mesh assigned to it
+    ref rHaze ; The actual haze object
+    ref rWeathers ; List of weathers that the haze effect is enabled for
+    float fNoonScale ; INI setting to use for scaling
+
+    ; 14 is the player reference
+    let rPlayer := GetFormFromMod "FalloutNV.esm" "14" 
+
+    ; CompileScript caches the function; repeated calls reuse it.
+    let rUpdate := CompileScript "HeatHazeESPless/HeatHazeUpdateUDF.gek"
+    if eval !rUpdate
+        Print "[HeatHazeESPless] Can't compile 'HeatHazeUpdateUDF' for some reason, stopping script."
+        return
+    endif
+
+    ; Stop updates during setup, including a manual reload with bEnabled=0.
+    rPlayer.SetGameMainLoopCallback rUpdate 0
+
+    ; Compile the cleanup function used before loading a save or leaving gameplay.
+    let rCleanup := CompileScript "HeatHazeESPless/HeatHazeCleanupUDF.gek"
+    if eval !rCleanup
+        Print "[HeatHazeESPless] Can't compile 'HeatHazeCleanupUDF' for some reason, stopping script."
+        return
+    endif
+
+    ; Register the cleanup script to run before loading a save
+    SetEventHandler "PreLoadGame" rCleanup
+
+    ; Read & work with the [Settings] NoonScale value from the ini file
+    let fNoonScale := GetINIFloat "Settings:NoonScale" "HeatHaze.ini"
+    if eval !fNoonScale
+        let fNoonScale := 3.00 ; Keep default of 3.00 if not specified
+    endif
+
+    ; Setting the NoonScale for use elsewhere in the script
+    rPlayer.AuxVarSetFlt "*_HeatHazeESPless.NoonScale" fNoonScale
+
+    ; Get the cached base for reference firstly
+    let rHazeBase := rPlayer.AuxVarGetRef "*_HeatHazeESPless.Base"
+
+    ; If we don't have it set-up already / not valid / not cloned, then we create it
+    if eval !rHazeBase || (GetType rHazeBase) != 21 || !(IsClonedForm rHazeBase)
+
+        ; 15182D is NelsonsLightBeamAct, this doesn't have anything meaninful attached, so we can use it as the template
+        ; Need to copy since we're ESPless
+        let rTemplate := GetFormFromMod "FalloutNV.esm" "15182D" ; 
+        
+        ; If for some reason it has a script already, or isn't an activator
+        if eval (GetType rTemplate) != 21 || (GetScript rTemplate) 
+            Print "[HeatHazeESPless] The template (15182D) either has a script or isn't an activator, stopping script."
+            return
+        endif
+
+        ; Cloning the template we've grabbed from NelsonsLightBeamAct (for the heat haze effect)
+        let rHazeBase := TempCloneForm rTemplate
+        if eval !rHazeBase
+            Print "[HeatHazeESPless] Couldn't clone the template we need, stopping script. "
+            return
+        endif
+        
+        ; Check if we have the model file
+        if eval !(SetModelPath "rwle\weather\heathaze\heathaze_torus.nif" rHazeBase)
+            Print "[HeatHazeESPless] Can't find the heat haze model file, stopping script."
+            return
+        endif
+
+        ; Storing the haze base in the reference so we can re-use it later on
+        rPlayer.AuxVarSetRef "*_HeatHazeESPless.Base" rHazeBase
+    endif
+
+    ; Fetching the cache'd object we setup before, and check if we got anything from it
+    let rHaze := rPlayer.AuxVarGetRef "*_HeatHazeESPless.Ref"
+    if eval rHaze
+        ; Check if the reference is valid (if not we need to create it again, setting it to 0)
+        if eval !(IsReference rHaze)
+            let rHaze := 0
+        ; Check if it's been modified outside of this script, and check if it's been deleted (32 = Deleted flag)
+        elseif eval (rHaze.GetBaseObject) != rHazeBase || (rHaze.GetRefFlag 32)
+            let rHaze := 0
+        endif
+    endif
+
+    ; If It hasn't been created yet, we need to create it and set it for use
+    if eval !rHaze
+        ; Place the object near us (1 is behind)
+        let rHaze := rPlayer.PlaceAtMe rHazeBase 1
+        if eval !rHaze
+            Print "[HeatHazeESPless] Can't create the heat haze reference near the player, stopping script."
+            return
+        endif
+
+        ; Set the object to be owned (so it doesn't get deleted on cell change apparently?)
+        rHaze.AuxVarSetFlt "*_HeatHazeESPless.Owner" 1
+        ; Keep it persistent across cell changes
+        rHaze.SetPersistent 1
+        ; Set it to be Temporary, since we don't save it with the game (needt to test this);
+        rHaze.SetRefFlag 16384 1
+        
+        ; Setting the angle, and disabling intraction including collission (similar to how the original did)
+        rHaze.SetAngleEx 0 0 0
+        rHaze.SetInteractionDisabled 1
+        rHaze.ToggleObjectCollision 0
+
+        ; Testing. This is for reflecting water, but might be just broken
+        rHaze.SetRefFlag 268435456 0
+        rHaze.SetRefFlag 536870912 0
+
+        ; Store the reference for later use
+        rPlayer.AuxVarSetRef "*_HeatHazeESPless.Ref" rHaze
+    endif
+
+    ; Hide during setup; bEnabled=0 must also hide a reused object.
+    rHaze.Disable
+
+    ; We need to build a list of weathers to check this against, the original used the form list (HeatHazeWeathers)
+    let rWeathers := rPlayer.AuxVarGetRef "*_HeatHazeESPless.Weathers"
+    if eval !rWeathers || (GetType rWeathers) != 85 ; 85 is checking if it's a FormList
+
+        let rWeathers := CreateFormList
+        if eval !rWeathers
+            Print "[HeatHazeESPless] Can't creat the weather list, stopping script."
+            return
+        endif
+
+        ; Codes from FNVEdit's Editor IDs from the original mod's form list 
+        ; Mod only created FNV versions; not FO3 / TTW specific ones
+        ListAddForm rWeathers (GetFormFromMod "FalloutNV.esm" "FFC88")  ; NVWastelandClear
+        ListAddForm rWeathers (GetFormFromMod "FalloutNV.esm" "10B599") ; NVCemeteryIntro
+        ListAddForm rWeathers (GetFormFromMod "FalloutNV.esm" "1237D7") ; NVWastelandGS
+        ListAddForm rWeathers (GetFormFromMod "FalloutNV.esm" "161241") ; NVTheStripWeather
+        ListAddForm rWeathers (GetFormFromMod "FalloutNV.esm" "171285") ; NVWastelandBorders
+        ListAddForm rWeathers (GetFormFromMod "FalloutNV.esm" "173564") ; NVUrbanClear
+        ListAddForm rWeathers (GetFormFromMod "FalloutNV.esm" "176574") ; NVWastelandClearNight
+        ListAddForm rWeathers (GetFormFromMod "FalloutNV.esm" "176575") ; NVWastelandClearEast
+
+        ; Finally storing the list for later usage
+        rPlayer.AuxVarSetRef "*_HeatHazeESPless.Weathers" rWeathers
+    endif
+
+    ; Check if the actual mod is enabled in the .INI file
+    if eval (GetINIString "General:bEnabled" "HeatHaze.ini") != "0"
+        
+        ; Now we need to register the update function.
+        ; Register it, call it every frame, and 1 + 8 (run during gameplay + unregister when loading / saving / returning to main menu)
+        rPlayer.SetGameMainLoopCallback rUpdate 1 1 9
+    endif
 end

@@ -1,0 +1,9 @@
+; Runs when going to the main menu
+ref rCleanup
+let rCleanup := CompileScript "HeatHazeESPless/HeatHazeCleanupUDF.gek"
+if eval rCleanup
+    call rCleanup ""
+else
+    Print "[HeatHazeESPless] Something broke trying to disable, check nvse.log"
+endif
+    

@@ -1,0 +1,62 @@
+begin function {}
+    ref rPlayer ; Player reference
+    ref rHaze ; The actual haze object
+    ref rWeathers ; List of weathers that the haze effect is enabled for
+    float fNoonScale ; INI setting to use for scaling
+
+    ; Player reference
+    let rPlayer := GetFormFromMod "FalloutNV.esm" "14"
+    ; Created haze object reference
+    let rHaze := rPlayer.AuxVarGetRef "*_HeatHazeESPless.Ref"
+    ; Created weather list
+    let rWeathers := rPlayer.AuxVarGetRef "*_HeatHazeESPless.Weathers"
+    ; Scale setting from ini file
+    let fNoonScale := rPlayer.AuxVarGetFlt "*_HeatHazeESPless.NoonScale"
+
+    ; If the haze doesn't exist, we don't need to clean up anything
+    if eval !rHaze || !(IsReference rHaze)
+        return
+    endif
+
+    ; Gated behing if the player is inside, or if the player is submerged in water at 87.5% or more (from original mod)
+    if eval rPlayer.IsInInterior == 1 || rPlayer.GetWaterImmersionPerc >= 0.875
+        ; Call the disable compile
+        call (CompileScript "HeatHazeESPless/HeatHazeDisableUDF.gek")
+    else
+        ; Basically porting the mod logic for haze intensity (checking if the weather is in the weather reference list we created)
+        ; Will probably re-write to be a bit better or something
+        float fOutgoingHeatHaze = ((IsRefInList rWeathers (GetOutgoingWeather)) != -1) * (1 - GetCurrentWeatherPercent)
+        float fIncomingHeatHaze = ((IsRefInList rWeathers (GetCurrentWeather)) != -1) * GetCurrentWeatherPercent
+        float fCurrentTime = GetCurrentTime
+
+        ; Logic for this is: Strongest at noon, forwards and backwards from that de-amplifies it
+        ; Will also probably re-write to be a bit ebetter
+        if fCurrentTime > 12
+            fCurrentTime = ((24 - fCurrentTime) + 0.001) / 12
+        else
+            fCurrentTime = (fCurrentTime + 0.001) / 12
+        endif
+
+        ; Original mod logic to calculate the intentisy of the effect
+        float fHeatHazeIntensity = (fOutgoingHeatHaze + fIncomingHeatHaze) * fCurrentTime
+        fHeatHazeIntensity += 0.001
+
+        ; Oriignal mod logic makes it only enable above 0.5
+        ; Need to go through this and figure out if we wanna parameterize it
+        if fHeatHazeIntensity > 0.5
+            fHeatHazeIntensity -= 0.5
+            ; If it's disabled, enable it (feels hacky?)
+            if rHaze.GetDisabled
+                rHaze.Enable
+            endif
+            ; This follows the player, but not the camera (?), so woudl third person break?
+            ; I think this can be potentially changed to be dynamic, since it feels super close....
+            rHaze.MoveTo rPlayer 0 0 10
+            ; Playing aorund with scale based on intensity, noon scale
+            rHaze.SetScale ((fNoonScale) / (1 - fHeatHazeIntensity))
+        else
+            ; Keep the object for reuse; hide it while conditions fail.
+            call (CompileScript "HeatHazeESPless/HeatHazeDisableUDF.gek")
+        endif
+    endif
+end
